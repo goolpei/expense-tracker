@@ -45,7 +45,7 @@ void AppShell::Render(core::AppState& state) {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::kBgSidebar);
     ImGui::BeginChild("##Sidebar", ImVec2(230.0f, 0.0f), ImGuiChildFlags_Borders);
     ImGui::PushFont(fonts_.bold ? fonts_.bold : ImGui::GetFont());
-    ImGui::TextColored(theme::kAccentPrimary, "LEDGER // OS");
+    ImGui::TextColored(theme::kAccentPrimary, "ExpenseScope");
     ImGui::PopFont();
     ImGui::TextColored(theme::kTextMuted, "Personal Expense Analytics");
     ImGui::Spacing();
