@@ -183,13 +183,14 @@ DashboardStats StatsEngine::Refresh(data::DatabaseManager& db, const core::AppSt
         return stats;
     }
     const year_month active_month = *active_month_value;
+    stats.active_month = FormatMonth(active_month);
     const Day active_month_start = MonthStart(active_month);
     const Day active_month_end = MonthEnd(active_month);
     const Day active_month_to_date = std::min(active_month_end, today);
 
-    const auto categories = db.GetCategories();
+    stats.categories = db.GetCategories();
     std::unordered_map<int64_t, std::string> category_colors;
-    for (const core::Category& category : categories) {
+    for (const core::Category& category : stats.categories) {
         category_colors.emplace(category.id, category.color_hex);
     }
 
@@ -293,11 +294,40 @@ DashboardStats StatsEngine::Refresh(data::DatabaseManager& db, const core::AppSt
             static_cast<long double>(transaction.amount_cents) > 2.0L * mean;
     }
 
-    stats.total_budget_cents =
-        SumBudgets(db, FormatMonth(active_month), state.selected_category_id);
+    stats.all_transactions = db.QueryTransactions("", "", 0, "");
+    std::unordered_map<int64_t, long double> all_category_sums;
+    std::unordered_map<int64_t, std::size_t> all_category_counts;
+    for (const core::Transaction& transaction : stats.all_transactions) {
+        all_category_sums[transaction.category_id] +=
+            static_cast<long double>(transaction.amount_cents);
+        ++all_category_counts[transaction.category_id];
+    }
+    for (core::Transaction& transaction : stats.all_transactions) {
+        const std::size_t count = all_category_counts[transaction.category_id];
+        if (count != 0) {
+            const long double mean =
+                all_category_sums[transaction.category_id] /
+                static_cast<long double>(count);
+            transaction.is_anomaly =
+                static_cast<long double>(transaction.amount_cents) > 2.0L * mean;
+        }
+    }
+
+    stats.active_month_budgets = db.GetBudgetsForMonth(FormatMonth(active_month));
+    for (const core::Budget& budget : stats.active_month_budgets) {
+        if (state.selected_category_id == 0 ||
+            budget.category_id == state.selected_category_id) {
+            stats.total_budget_cents =
+                SaturatingAdd(stats.total_budget_cents, budget.monthly_limit_cents);
+        }
+    }
     const auto month_transactions =
         QueryTransactions(db, active_month_start, active_month_to_date, state);
     const int64_t month_spent = SumAmounts(month_transactions);
+    if (active_month_start <= active_month_to_date) {
+        stats.active_month_transactions = db.QueryTransactions(
+            FormatDate(active_month_start), FormatDate(active_month_to_date), 0, "");
+    }
     stats.remaining_budget_cents =
         Difference(stats.total_budget_cents, month_spent);
 

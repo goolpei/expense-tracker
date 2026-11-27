@@ -41,7 +41,12 @@ struct DashboardStats {
     std::array<double, 7 * 12> heatmap_values{};
     std::array<std::string, 7 * 12> heatmap_dates{};
 
+    std::string active_month;
+    std::vector<core::Category> categories;
+    std::vector<core::Budget> active_month_budgets;
+    std::vector<core::Transaction> active_month_transactions;
     std::vector<core::Transaction> transactions;
+    std::vector<core::Transaction> all_transactions;
 };
 
 class StatsEngine {

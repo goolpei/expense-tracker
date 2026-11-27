@@ -1,4 +1,6 @@
 #include "core/app_state.hpp"
+#include "data/database.hpp"
+#include "ui/app_shell.hpp"
 #include "ui/theme.hpp"
 
 #include "imgui.h"
@@ -117,99 +119,16 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return ::DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-// Temporary Phase 1 bootstrap shell to verify Obsidian Slate theme + ImPlot rendering
-void RenderBootstrapShell(core::AppState& state, const ui::theme::FontSet& fonts) {
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
-
-    constexpr ImGuiWindowFlags kRootFlags =
-        ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoBringToFrontOnFocus;
-
-    ImGui::Begin("##RootWorkspace", nullptr, kRootFlags);
-
-    // Left Sidebar
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ui::theme::kBgSidebar);
-    ImGui::BeginChild("##Sidebar", ImVec2(230.0f, 0.0f), ImGuiChildFlags_Borders);
-    {
-        ImGui::PushFont(fonts.bold);
-        ImGui::TextColored(ui::theme::kAccentPrimary, "LEDGER // OS");
-        ImGui::PopFont();
-        ImGui::TextColored(ui::theme::kTextMuted, "Personal Expense Analytics");
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        const char* nav_labels[] = {"Overview", "Deep Analytics", "Transactions", "Budgets"};
-        for (int i = 0; i < 4; ++i) {
-            const bool selected = (static_cast<int>(state.active_tab) == i);
-            if (selected) {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.220f, 0.741f, 0.973f, 0.20f));
-                ImGui::PushStyleColor(ImGuiCol_Text, ui::theme::kAccentPrimary);
-            }
-            if (ImGui::Button(nav_labels[i], ImVec2(-1.0f, 38.0f))) {
-                state.active_tab = static_cast<core::NavTab>(i);
-            }
-            if (selected) {
-                ImGui::PopStyleColor(2);
-            }
-        }
-    }
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
-
-    ImGui::SameLine();
-
-    // Main Content Canvas
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ui::theme::kBgCanvas);
-    ImGui::BeginChild("##MainContent", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None);
-    {
-        ImGui::PushFont(fonts.bold);
-        ImGui::TextUnformatted("Phase 1 Bootstrap: Obsidian Slate Ready");
-        ImGui::PopFont();
-        ImGui::TextColored(ui::theme::kTextMuted,
-            "Win32 + DirectX 11 + Dear ImGui + ImPlot initialized. Ready for Phase 2 SQLite & StatsEngine.");
-        ImGui::Spacing();
-
-        // Sample KPI Card
-        ImGui::BeginChild("##SampleKpi", ImVec2(320.0f, 110.0f), ImGuiChildFlags_Borders);
-        {
-            ImGui::TextColored(ui::theme::kTextMuted, "BOOTSTRAP STATUS");
-            ImGui::PushFont(fonts.kpi_hero);
-            ImGui::TextColored(ui::theme::kAccentEmerald, "100%% Operational");
-            ImGui::PopFont();
-        }
-        ImGui::EndChild();
-
-        ImGui::Spacing();
-
-        // Sample ImPlot Verification Card
-        ImGui::BeginChild("##SamplePlotCard", ImVec2(0.0f, 320.0f), ImGuiChildFlags_Borders);
-        {
-            static constexpr double kDays[7]  = {1, 2, 3, 4, 5, 6, 7};
-            static constexpr double kSpend[7] = {24.5, 42.0, 18.75, 65.0, 31.2, 88.4, 52.1};
-
-            if (ImPlot::BeginPlot("Spending Pace Preview (Sample Data)", ImVec2(-1.0f, -1.0f))) {
-                ImPlot::SetupAxes("Day", "Spend ($)");
-                ImPlot::PlotLine("Daily Outflow", kDays, kSpend, 7);
-                ImPlot::EndPlot();
-            }
-        }
-        ImGui::EndChild();
-    }
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
-
-    ImGui::End();
-}
-
 } // namespace
 
 int main(int, char**) {
+    data::DatabaseManager database;
+    if (!database.Initialize() || !database.SeedMockDataIfEmpty()) {
+        ::MessageBoxW(nullptr, L"Could not initialize the expense database.",
+            L"Expense Tracker", MB_OK | MB_ICONERROR);
+        return 1;
+    }
+
     ImGui_ImplWin32_EnableDpiAwareness();
     const float main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(
         ::MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY));
@@ -262,11 +181,13 @@ int main(int, char**) {
 
     ui::theme::ApplyObsidianSlateTheme(main_scale);
     const ui::theme::FontSet fonts = ui::theme::LoadAppFonts(main_scale);
+    ui::AppShell app_shell(database, fonts);
 
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
     core::AppState app_state{};
+    app_state.db_ready = database.IsOpen();
 
     bool done = false;
     while (!done) {
@@ -299,7 +220,7 @@ int main(int, char**) {
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
 
-        RenderBootstrapShell(app_state, fonts);
+        app_shell.Render(app_state);
 
         ImGui::Render();
         const float clear_color[4] = {

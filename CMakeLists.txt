@@ -60,6 +60,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     dxgi
     d3dcompiler
     dwmapi
+    comdlg32
 )
 
 # Support WinMain entry point cleanly on both MSVC and MinGW-w64
